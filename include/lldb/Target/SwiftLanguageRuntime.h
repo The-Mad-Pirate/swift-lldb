@@ -470,12 +470,14 @@ protected:
                      std::unique_ptr<swift::remoteAST::RemoteASTContext>>
     m_remote_ast_contexts;
 
-  std::unordered_map<const char *, lldb::SyntheticChildrenSP>
+// [BEGIN GOOGLE] Change const char * -> std::string
+  std::unordered_map<std::string, lldb::SyntheticChildrenSP>
       m_bridged_synthetics_map;
 
   /// Cached member variable offsets.
-  typename KeyHasher<const swift::TypeBase *, const char *, uint64_t>::MapType
+  typename KeyHasher<const swift::TypeBase *, std::string, uint64_t>::MapType
     m_member_offsets;
+// [END GOOGLE]
 
   CompilerType m_box_metadata_type;
 

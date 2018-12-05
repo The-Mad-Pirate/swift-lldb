@@ -1193,8 +1193,11 @@ static swift::ASTContext *SetupASTContext(
   if (repl || !playground)
     swift_ast_context->GetLanguageOptions().EnableThrowWithoutTry = true;
 
+  // SWIFT_ENABLE_TENSORFLOW
+  // FIXME: When partitioning joins the mandatory pass pipeline, we should be able to
+  // switch this back to NoOptimization.
   swift_ast_context->GetIRGenOptions().OptMode =
-      swift::OptimizationMode::NoOptimization;
+      swift::OptimizationMode::ForSpeed;
   // Normally we'd like to verify, but unfortunately the verifier's
   // error mode is abort().
   swift_ast_context->GetIRGenOptions().Verify = false;
@@ -1894,8 +1897,12 @@ unsigned SwiftExpressionParser::Parse(DiagnosticManager &diagnostic_manager,
         variable_map[name] = *var_info;
       }
 
+  // SWIFT_ENABLE_TENSORFLOW
+  // Set optimization mode to -O for REPL/Playgrounds.
+  auto &options = swift_ast_ctx->GetSILOptions();
+  options.OptMode = swift::OptimizationMode::ForSpeed;
   std::unique_ptr<swift::SILModule> sil_module(swift::performSILGeneration(
-      parsed_expr->source_file, swift_ast_ctx->GetSILOptions()));
+      parsed_expr->source_file, options));
 
   if (log) {
     std::string s;
@@ -1925,6 +1932,20 @@ unsigned SwiftExpressionParser::Parse(DiagnosticManager &diagnostic_manager,
   }
 
   runSILDiagnosticPasses(*sil_module);
+
+  // SWIFT_ENABLE_TENSORFLOW
+  // FIXME: When partitioning joins the mandatory pass pipeline, we should be able to
+  // stop running the optimization passes and drop the explicit call of the partitioning
+  // pass.
+  sil_module->setSerializeSILAction([]{});
+  runSILOptPreparePasses(*sil_module);
+  runSILOptimizationPasses(*sil_module);
+
+  // FIXME: These passes should be moved to the mandatory pass pipeline that
+  // runs at -O0.  We need a proper deabstraction pass to do that though.
+  runSILTFPartitionPass(*sil_module);
+  // SWIFT_ENABLE_TENSORFLOW
+
 
   if (log) {
     std::string s;
